@@ -73,6 +73,15 @@ $ http {{ .Host }}/country-iso
 $ http {{ .Host }}/city
 {{ .City }}</pre>
 {{ end }}
+{{ if .ASN }}
+        <h2>ASN lookup</h2>
+        <pre>
+$ http {{ .Host }}/asn
+{{ .ASN }}
+
+$ http {{ .Host }}/as-org
+{{ .ASOrg }}</pre>
+{{ end }}
       </div>
       <div class="pure-u-1 pure-u-md-1-2">
         <h2>JSON output</h2>

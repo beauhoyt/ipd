@@ -7,15 +7,16 @@ import (
 
 	"os"
 
-	"github.com/mpolden/ipd/http"
-	"github.com/mpolden/ipd/iputil"
-	"github.com/mpolden/ipd/iputil/database"
+	"github.com/beauhoyt/ipd/http"
+	"github.com/beauhoyt/ipd/iputil"
+	"github.com/beauhoyt/ipd/iputil/database"
 )
 
 func main() {
 	var opts struct {
 		CountryDBPath string `short:"f" long:"country-db" description:"Path to GeoIP country database" value-name:"FILE" default:""`
 		CityDBPath    string `short:"c" long:"city-db" description:"Path to GeoIP city database" value-name:"FILE" default:""`
+		AsnDBPath     string `short:"a" long:"asn-db" description:"Path to GeoIP ASN database" value-name:"FILE" default:""`
 		Listen        string `short:"l" long:"listen" description:"Listening address" value-name:"ADDR" default:":8080"`
 		ReverseLookup bool   `short:"r" long:"reverse-lookup" description:"Perform reverse hostname lookups"`
 		PortLookup    bool   `short:"p" long:"port-lookup" description:"Enable port lookup"`
@@ -28,7 +29,7 @@ func main() {
 	}
 
 	log := log.New(os.Stderr, "ipd: ", 0)
-	db, err := database.New(opts.CountryDBPath, opts.CityDBPath)
+	db, err := database.New(opts.CountryDBPath, opts.CityDBPath, opts.AsnDBPath)
 	if err != nil {
 		log.Fatal(err)
 	}

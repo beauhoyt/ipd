@@ -9,6 +9,7 @@ import (
 type Client interface {
 	Country(net.IP) (Country, error)
 	City(net.IP) (string, error)
+	ASN(net.IP) (AS, error)
 	IsEmpty() bool
 }
 
@@ -17,13 +18,19 @@ type Country struct {
 	ISO  string
 }
 
+type AS struct {
+	Number       uint
+	Organization string
+}
+
 type geoip struct {
 	country *geoip2.Reader
 	city    *geoip2.Reader
+	asn     *geoip2.Reader
 }
 
-func New(countryDB, cityDB string) (Client, error) {
-	var country, city *geoip2.Reader
+func New(countryDB, cityDB, asnDB string) (Client, error) {
+	var country, city, asn *geoip2.Reader
 	if countryDB != "" {
 		r, err := geoip2.Open(countryDB)
 		if err != nil {
@@ -38,7 +45,14 @@ func New(countryDB, cityDB string) (Client, error) {
 		}
 		city = r
 	}
-	return &geoip{country: country, city: city}, nil
+	if asnDB != "" {
+		r, err := geoip2.Open(asnDB)
+		if err != nil {
+			return nil, err
+		}
+		asn = r
+	}
+	return &geoip{country: country, city: city, asn: asn}, nil
 }
 
 func (g *geoip) Country(ip net.IP) (Country, error) {
@@ -77,6 +91,24 @@ func (g *geoip) City(ip net.IP) (string, error) {
 		return city, nil
 	}
 	return "", nil
+}
+
+func (g *geoip) ASN(ip net.IP) (AS, error) {
+	as := AS{}
+	if g.asn == nil {
+		return as, nil
+	}
+	record, err := g.asn.ASN(ip)
+	if err != nil {
+		return as, err
+	}
+	if record.AutonomousSystemNumber != 0 {
+		as.Number = record.AutonomousSystemNumber
+	}
+	if record.AutonomousSystemOrganization != "" {
+		as.Organization = record.AutonomousSystemOrganization
+	}
+	return as, nil
 }
 
 func (g *geoip) IsEmpty() bool {

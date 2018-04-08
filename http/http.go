@@ -6,13 +6,14 @@ import (
 	"html/template"
 	"path/filepath"
 
-	"github.com/mpolden/ipd/iputil"
-	"github.com/mpolden/ipd/iputil/database"
-	"github.com/mpolden/ipd/useragent"
+	"github.com/beauhoyt/ipd/iputil"
+	"github.com/beauhoyt/ipd/iputil/database"
+	"github.com/beauhoyt/ipd/useragent"
 
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -34,6 +35,8 @@ type Response struct {
 	Country    string `json:"country,omitempty"`
 	CountryISO string `json:"country_iso,omitempty"`
 	City       string `json:"city,omitempty"`
+	ASN        uint   `json:"asn,omitempty"`
+	ASOrg      string `json:"as_org,omitempty"`
 	Hostname   string `json:"hostname,omitempty"`
 }
 
@@ -56,6 +59,10 @@ func ipFromRequest(header string, r *http.Request) (net.IP, error) {
 		}
 		remoteIP = host
 	}
+	// Support Load Balancers
+	if strings.Contains(remoteIP, ",") {
+		remoteIP = strings.Split(remoteIP, ",")[0]
+	}
 	ip := net.ParseIP(remoteIP)
 	if ip == nil {
 		return nil, fmt.Errorf("could not parse IP: %s", remoteIP)
@@ -71,6 +78,7 @@ func (s *Server) newResponse(r *http.Request) (Response, error) {
 	ipDecimal := iputil.ToDecimal(ip)
 	country, _ := s.db.Country(ip)
 	city, _ := s.db.City(ip)
+	asn, _ := s.db.ASN(ip)
 	var hostname string
 	if s.LookupAddr != nil {
 		hostname, _ = s.LookupAddr(ip)
@@ -81,6 +89,8 @@ func (s *Server) newResponse(r *http.Request) (Response, error) {
 		Country:    country.Name,
 		CountryISO: country.ISO,
 		City:       city,
+		ASN:        asn.Number,
+		ASOrg:      asn.Organization,
 		Hostname:   hostname,
 	}, nil
 }
@@ -139,6 +149,24 @@ func (s *Server) CLICityHandler(w http.ResponseWriter, r *http.Request) *appErro
 	return nil
 }
 
+func (s *Server) CLIAsnHandler(w http.ResponseWriter, r *http.Request) *appError {
+	response, err := s.newResponse(r)
+	if err != nil {
+		return internalServerError(err)
+	}
+	fmt.Fprintln(w, response.ASN)
+	return nil
+}
+
+func (s *Server) CLIAsOrgHandler(w http.ResponseWriter, r *http.Request) *appError {
+	response, err := s.newResponse(r)
+	if err != nil {
+		return internalServerError(err)
+	}
+	fmt.Fprintln(w, response.ASOrg)
+	return nil
+}
+
 func (s *Server) JSONHandler(w http.ResponseWriter, r *http.Request) *appError {
 	response, err := s.newResponse(r)
 	if err != nil {
@@ -164,6 +192,11 @@ func (s *Server) PortHandler(w http.ResponseWriter, r *http.Request) *appError {
 	}
 	w.Header().Set("Content-Type", jsonMediaType)
 	w.Write(b)
+	return nil
+}
+
+func (s *Server) HealthCheck(w http.ResponseWriter, r *http.Request) *appError {
+	w.Write([]byte("ok"))
 	return nil
 }
 
@@ -253,10 +286,15 @@ func (s *Server) Handler() http.Handler {
 		r.Route("GET", "/country", s.CLICountryHandler)
 		r.Route("GET", "/country-iso", s.CLICountryISOHandler)
 		r.Route("GET", "/city", s.CLICityHandler)
+		r.Route("GET", "/asn", s.CLIAsnHandler)
+		r.Route("GET", "/as-org", s.CLIAsOrgHandler)
 	}
 
 	// Browser
 	r.Route("GET", "/", s.DefaultHandler)
+
+	// Health Check for Load Balancer
+	r.Route("GET", "/_ah/health", s.HealthCheck)
 
 	// Port testing
 	if s.LookupPort != nil {
